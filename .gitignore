@@ -220,4 +220,6 @@ __marimo__/
 # custom gitignores
 /outputs/*
 *notes.md
+
+/models
 /.claude
