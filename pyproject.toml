@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Agoth Arop", email = "agoth.a3@gmail.com" }
 ]
-requires-python = ">=3.13"
+requires-python = "==3.12"
 dependencies = [
     "numpy>=2.5.3",
     "torch>=2.14.1",
@@ -21,3 +21,6 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "lq"
+
+[tool.uv]
+required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
