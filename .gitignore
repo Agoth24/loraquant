@@ -222,4 +222,5 @@ __marimo__/
 *notes.md
 
 /models
-/.claude
+CLAUDE.md
+*.pdf
