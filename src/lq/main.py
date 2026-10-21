@@ -60,10 +60,12 @@ def format_results_path(args) -> Path:
         "lo": args.low_bits,
         "grp": args.group_size if quantized else None,
         "rho": args.ratio if quantized else None,
-        "lim": args.limit
+        "lim": args.limit,
     }
 
-    filename_parts = [args.method] + [f"{opt}{val}" for opt, val in options.items() if val is not None]
+    filename_parts = [args.method] + [
+        f"{opt}{val}" for opt, val in options.items() if val is not None
+    ]
 
     filename = "_".join(filename_parts) + ".json"
 
@@ -96,7 +98,8 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(
         pretrained_model_name_or_path=args.model,
         quantization_config=bits_config,
-        token=hf_access_token, device_map="auto"
+        token=hf_access_token,
+        device_map="auto",
     )
     print(
         f"Successfully loaded {model.name_or_path} onto device: {device.capitalize()}"
@@ -120,22 +123,25 @@ def main():
     eval_results: dict = evaluator.simple_evaluate(
         model=hf_lm,
         tasks=[args.dataset],
-        num_fewshot=0, # no fewshots given
+        num_fewshot=0,  # no fewshots given
         limit=args.limit,
         batch_size=1,
         device=device,
-        indent=0
     )
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     # log eval results to json
     with open(out_path, "w") as f:
-        json.dump({
-            "config": vars(args),
-            "results": eval_results["results"],
-            "generations": eval_results["samples"][args.dataset]
-        }, f)
+        json.dump(
+            {
+                "config": vars(args),
+                "results": eval_results["results"],
+                "generations": eval_results["samples"][args.dataset],
+            },
+            f,
+            indent=0,
+        )
 
 
 if __name__ == "__main__":

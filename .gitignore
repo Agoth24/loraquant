@@ -221,6 +221,7 @@ __marimo__/
 /outputs/*
 *notes.md
 
+/weights
 /models
 CLAUDE.md
 *.pdf
