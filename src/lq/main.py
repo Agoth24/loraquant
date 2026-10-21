@@ -1,3 +1,4 @@
+from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 import torch
 import numpy
 import argparse
@@ -43,13 +44,6 @@ def get_args():
     return parser.parse_args()
 
 
-def validate_args(args):
-    if args.model not in ["meta-llama/Llama-2-7b-hf"]:
-        raise ValueError(
-            f"Invalid model: {args.model}. Must be one of: ['meta-llama/Llama-2-7b-hf']"
-        )
-
-
 # CONVERT ARGUMENTS INTO PATH FOR RESULTS
 def format_results_path(args) -> Path:
     # shorten the model name
@@ -61,10 +55,37 @@ def format_results_path(args) -> Path:
 
 
 def main():
+    # set device for torch
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    # grab CLAs and output path
     args = get_args()
     path = format_results_path(args)
     # os.makedirs(path, exist_ok=True)
 
+    hf_access_token = os.environ.get("HF_TOKEN", default=None)
+
+    compute_data_type = getattr(torch, "float16")
+
+    # MODEL QUANTIZATION CONFIG
+    bits_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=compute_data_type,
+        bnb_4bit_use_double_quant=True,
+    )
+
+    
+    # LOAD MODEL
+    model = AutoModelForCausalLM.from_pretrained(
+        args.model,
+        quantization_config=bits_config,
+        token=hf_access_token
+    ).to(device)
+    print(f"Successfully loaded {model.name_or_path} onto device: {device}")
+
+
+    
 
 if __name__ == "__main__":
     main()
