@@ -26,13 +26,13 @@ CLI_ARGS = {
     "--adapter_path": dict(required=True, type=str),
     # ["minerva_math_algebra", "humaneval", "mbpp", "EdinburghNLP/xsum"]
     # "--num_fewshot": dict(type=int, default=0),
-    "--num_bits_high": dict(type=int),
-    "--num_bits_low": dict(type=int),
     "--group_size": dict(type=int, default=128),
+    "--high_bits": dict(type=int),
+    "--low_bits": dict(type=int),
     "--ratio": dict(type=float, default=0.7),
     "--opt": dict(action="store_true"),
     "--limit": dict(type=int),
-    "--results_dir": dict(type=str, default="outputs"),
+    "--res_path": dict(type=str, default="outputs"),
 }
 
 
@@ -56,8 +56,8 @@ def format_results_path(args) -> Path:
     quantized = args.method != "fp"
 
     options = {
-        "hi": args.num_bits_high,
-        "lo": args.num_bits_low,
+        "hi": args.high_bits,
+        "lo": args.low_bits,
         "grp": args.group_size if quantized else None,
         "rho": args.ratio if quantized else None,
         "lim": args.limit
@@ -67,7 +67,7 @@ def format_results_path(args) -> Path:
 
     filename = "_".join(filename_parts) + ".json"
 
-    return Path(args.results_dir) / model_name / args.dataset / args.method / filename
+    return Path(args.res_path) / model_name / args.dataset / args.method / filename
 
 
 def main():
@@ -124,6 +124,7 @@ def main():
         limit=args.limit,
         batch_size=1,
         device=device,
+        indent=0
     )
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
@@ -132,8 +133,9 @@ def main():
     with open(out_path, "w") as f:
         json.dump({
             "config": vars(args),
-            
-        })
+            "results": eval_results["results"],
+            "generations": eval_results["samples"][args.dataset]
+        }, f)
 
 
 if __name__ == "__main__":
