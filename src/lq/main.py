@@ -1,9 +1,12 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from peft import PeftModel
 import torch
-import numpy
 import argparse
 import os
+import json
 from pathlib import Path
+from lm_eval import evaluator
+from lm_eval.models.huggingface import HFLM
 
 CLI_ARGS = {
     "--model": dict(
@@ -49,19 +52,33 @@ def format_results_path(args) -> Path:
     # shorten the model name
     model_name = args.model.split("/")[-1].lower()
 
-    path = Path(args.results_dir) / model_name / args.dataset / args.method
+    # if the method quantizes the adapter
+    quantized = args.method != "fp"
 
-    return path
+    options = {
+        "hi": args.num_bits_high,
+        "lo": args.num_bits_low,
+        "grp": args.group_size if quantized else None,
+        "rho": args.ratio if quantized else None,
+        "lim": args.limit
+    }
+
+    filename_parts = [args.method] + [f"{opt}{val}" for opt, val in options.items() if val is not None]
+
+    filename = "_".join(filename_parts) + ".json"
+
+    return Path(args.results_dir) / model_name / args.dataset / args.method / filename
 
 
 def main():
     # set device for torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device.upper()}")
 
     # grab CLAs and output path
     args = get_args()
-    path = format_results_path(args)
-    # os.makedirs(path, exist_ok=True)
+
+    out_path = format_results_path(args)
 
     hf_access_token = os.environ.get("HF_TOKEN", default=None)
 
@@ -75,17 +92,49 @@ def main():
         bnb_4bit_use_double_quant=True,
     )
 
-    
     # LOAD MODEL
     model = AutoModelForCausalLM.from_pretrained(
-        args.model,
+        pretrained_model_name_or_path=args.model,
         quantization_config=bits_config,
-        token=hf_access_token
-    ).to(device)
-    print(f"Successfully loaded {model.name_or_path} onto device: {device}")
+        token=hf_access_token, device_map="auto"
+    )
+    print(
+        f"Successfully loaded {model.name_or_path} onto device: {device.capitalize()}"
+    )
 
+    tokenizer = AutoTokenizer.from_pretrained(
+        pretrained_model_name_or_path=args.model, token=hf_access_token
+    )
 
-    
+    # add the pre-trained adapter to the model
+    model = PeftModel.from_pretrained(
+        model=model, model_id=args.adapter_path, local_files_only=True
+    )
+
+    # EVAL SECTION
+    model.eval()
+
+    hf_lm = HFLM(pretrained=model, tokenizer=tokenizer, device=device)
+
+    # run evals
+    eval_results: dict = evaluator.simple_evaluate(
+        model=hf_lm,
+        tasks=[args.dataset],
+        num_fewshot=0, # no fewshots given
+        limit=args.limit,
+        batch_size=1,
+        device=device,
+    )
+
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    # log eval results to json
+    with open(out_path, "w") as f:
+        json.dump({
+            "config": vars(args),
+            
+        })
+
 
 if __name__ == "__main__":
     main()
