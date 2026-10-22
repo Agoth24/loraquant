@@ -10,6 +10,7 @@ requires-python = "==3.12.*"
 dependencies = [
     "accelerate>=1.15.0",
     "bitsandbytes>=0.50.2",
+    "jaxtyping>=0.3.11",
     "lm-eval[hf]>=0.4.13",
     "numpy>=2.5.3",
     "peft>=0.21.2",

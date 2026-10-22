@@ -2,13 +2,14 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
 import torch
 import argparse
+from typing import Any
 import os
 import json
 from pathlib import Path
 from lm_eval import evaluator
 from lm_eval.models.huggingface import HFLM
 
-CLI_ARGS = {
+CLI_ARGS: dict[str, Any] = {
     "--model": dict(
         required=True,
         choices=[
@@ -48,7 +49,7 @@ def get_args():
 
 
 # CONVERT ARGUMENTS INTO PATH FOR RESULTS
-def format_results_path(args) -> Path:
+def format_results_path(args: dict[str, Any]) -> Path:
     # shorten the model name
     model_name = args.model.split("/")[-1].lower()
 
@@ -80,7 +81,7 @@ def main():
     # grab CLAs and output path
     args = get_args()
 
-    out_path = format_results_path(args)
+    out_path = format_results_path(vars(args))
 
     hf_access_token = os.environ.get("HF_TOKEN", default=None)
 
@@ -102,7 +103,7 @@ def main():
         device_map="auto",
     )
     print(
-        f"Successfully loaded {model.name_or_path} onto device: {device.capitalize()}"
+        f"Successfully loaded {model.name_or_path} onto device: {device.upper()}"
     )
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -117,10 +118,10 @@ def main():
     # EVAL SECTION
     model.eval()
 
-    hf_lm = HFLM(pretrained=model, tokenizer=tokenizer, device=device)
+    hf_lm = HFLM(pretrained=model, tokenizer=tokenizer, device=device, batch_size="auto")
 
     # run evals
-    eval_results: dict = evaluator.simple_evaluate(
+    eval_results = evaluator.simple_evaluate(
         model=hf_lm,
         tasks=[args.dataset],
         num_fewshot=0,  # no fewshots given
