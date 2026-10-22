@@ -86,7 +86,7 @@ def main():
 
     compute_data_type = getattr(torch, "float16")
 
-    # MODEL QUANTIZATION CONFIG
+    # set model quantization config
     bits_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -94,7 +94,7 @@ def main():
         bnb_4bit_use_double_quant=True,
     )
 
-    # LOAD MODEL
+    # load model
     model = AutoModelForCausalLM.from_pretrained(
         pretrained_model_name_or_path=args.model,
         quantization_config=bits_config,
@@ -125,7 +125,7 @@ def main():
         tasks=[args.dataset],
         num_fewshot=0,  # no fewshots given
         limit=args.limit,
-        batch_size=1,
+        batch_size="auto",
         device=device,
     )
 
@@ -140,7 +140,7 @@ def main():
                 "generations": eval_results["samples"][args.dataset],
             },
             f,
-            indent=0,
+            indent=2,
         )
 
 
