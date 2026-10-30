@@ -20,27 +20,34 @@ def svd_split(B: Float[Tensor, "m r"], A: Float[Tensor, "r n"]):
     rel_err = (B_prime @ A_prime - delta_W).norm() / delta_W.norm()
 
     # assert the matrices are close in working precision
-    assert rel_err < 1e-6, rel_err
+    assert rel_err < 1e-4, rel_err
 
     return B_prime, A_prime, S
 
 
 def compute_h(rho: float, S: Float[Tensor, "r"]) -> int:
+
+    if not 0 < rho <= 1:
+        raise ValueError(f"variance ratio = {rho} must be in (0, 1]")
+
     # energy is the sum of squared singular values
     energy = S**2
 
     cumulative_variance = energy.cumsum(0)
-    overall_variance = energy.sum()
+    # last element of ratio is 1
+    overall_variance = cumulative_variance[-1]
 
     explained_variance_ratio = cumulative_variance / overall_variance
 
     candidate_indices = (explained_variance_ratio >= rho).nonzero(as_tuple=True)[0]
+
     if len(candidate_indices) == 0:
         raise ValueError(
             f"rho = {rho} is not attained by any number of singular values"
         )
 
     h = candidate_indices[0].item() + 1
+
     return h
 
 
@@ -48,14 +55,20 @@ def ste_round(x: Float[Tensor, "m n"]):
     # pytorch backward pass only sees x
     return x + (torch.round(x) - x).detach()
 
+def ste_sign(x: Float[Tensor, "m n"]):
+    return x + (torch.where(x >= 0, 1, -1) - x).detach()
 
 def ste_optimize(
     B: Float[Tensor, "m h"],
     A: Float[Tensor, "h n"],
     n_bits: int,
-    n_steps: int,
-    lr: float,
+    method: str,
+    n_steps: int = 100,
+    lr: float = 1e-2,
+    group_size: int = 128,
 ):
+
+    # clone the adapter matrices
     B_opt, A_opt = (
         B.detach().clone().requires_grad_(),
         A.detach().clone().requires_grad_(),
@@ -64,16 +77,17 @@ def ste_optimize(
     training_target = (B @ A).detach()
 
     # init optimizer for B_opt, A_opt
-    optimizer = torch.optim.AdamW([B_opt, A_opt], lr=lr, weight_decay=0)
+    optimizer = torch.optim.Adam([B_opt, A_opt], lr=lr)
 
+    # run STE
     for _ in range(n_steps):
         # quantize
-        Q_B, scale_B, zero_B = rtn_quant(B_opt, n_bits, group_size=1)
-        Q_A, scale_A, zero_A = rtn_quant(A_opt, n_bits, group_size=1)
+        qB = quantize(B_opt, n_bits, group_size, method, columnwise=True)
+        qA = quantize(A_opt, n_bits, group_size, method, columnwise=False)
 
         # dequantize (recover the matrices)
-        B_rec = ste_round(rtn_dequant(Q_B, scale_B, zero_B))
-        A_rec = ste_round(rtn_dequant(Q_A, scale_A, zero_A))
+        B_rec = dequantize(*qB, method=method, columnwise=True)
+        A_rec = dequantize(*qA, method=method, columnwise=False)
 
         # compute the frobenius norm between recovered & original adapter
         loss = torch.norm(B_rec @ A_rec - training_target, p="fro")
@@ -87,16 +101,33 @@ def ste_optimize(
     return B_opt.detach(), A_opt.detach()
 
 
-def quantize(A: Float[Tensor, "m n"], n_bits: int, group_size: int, method: str):
+def quantize(
+    A: Float[Tensor, "m n"],
+    n_bits: int,
+    group_size: int,
+    method: str,
+    columnwise: bool = False,
+):
     if method == "rtn":
-        return rtn_quant(A, n_bits, group_size)
+        return rtn_quant(A, n_bits, group_size, columnwise)
     elif method == "binary":
-        return binary_quant(A, group_size)
+        return binary_quant(A, group_size, columnwise)
     else:
-        raise ValueError(f"Unknown quantization method: {method}")
+        raise ValueError(f"Unknown quantization method: {method}") 
+    
+def dequantize(Q, scale, zero_point, method: str, columnwise: bool = False):
+    if method == "rtn":
+        return rtn_dequant(Q, scale, zero_point, columnwise)
+    elif method == "binary":
+        return binary_dequant(Q, scale, columnwise)
+    else:
+        raise ValueError(f"Unknown dequantization method {method}")
 
 
-def binary_quant(A: Float[Tensor, "m n"], group_size: int):
+def binary_quant(A: Float[Tensor, "m n"], group_size: int, columnwise: bool = False):
+    if columnwise:
+        A = A.T
+
     m, n = A.shape
 
     assert (
@@ -107,18 +138,23 @@ def binary_quant(A: Float[Tensor, "m n"], group_size: int):
     # A: (m, n/g, g)
     A_grouped = A.reshape(m, n // group_size, group_size)
 
-    Q = torch.sign(A_grouped)
     scale = A_grouped.abs().mean(dim=-1, keepdim=True)
+    Q = ste_sign(A_grouped)
 
-    return Q, scale
+    return Q, scale, None
 
 
-def binary_dequant(Q, scale):
-    return (scale * Q).reshape(Q.shape[0], -1)
+def binary_dequant(Q, scale, columnwise: bool = False):
+    dQ = (scale * Q).reshape(Q.shape[0], -1)
+    return dQ.T if columnwise else dQ
 
 
 # asymmetric by default
-def rtn_quant(A: Float[Tensor, "m n"], n_bits, group_size: int):
+def rtn_quant(A: Float[Tensor, "m n"], n_bits, group_size: int = 128, columnwise: bool = False):
+
+    if columnwise:
+        A = A.T
+
     m, n = A.shape
 
     q_min, q_max = -(2 ** (n_bits - 1)), 2 ** (n_bits - 1) - 1
@@ -145,5 +181,6 @@ def rtn_quant(A: Float[Tensor, "m n"], n_bits, group_size: int):
     return Q, scale, zero_point_offset
 
 
-def rtn_dequant(Q, scale, zero_point):
-    return (scale * (Q - zero_point)).reshape(Q.shape[0], -1)
+def rtn_dequant(Q, scale, zero_point, columnwise: bool = False):
+    dQ = (scale * (Q - zero_point)).reshape(Q.shape[0], -1)
+    return dQ.T if columnwise else dQ

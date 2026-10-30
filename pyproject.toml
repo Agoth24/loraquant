@@ -28,5 +28,10 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "lq"
 
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
 [tool.uv]
 required-environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
