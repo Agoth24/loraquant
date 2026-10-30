@@ -1,9 +1,7 @@
 # Implementation Plan
 
 ## methods
-
-- svd operation
-- sublora split
+- sublora split w/ svd (DONE)
 
 - compute h from rho
 
