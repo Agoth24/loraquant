@@ -33,13 +33,13 @@ def compute_h(rho: float, S: Float[Tensor, "r"]) -> int:
 
     explained = candidate_var / total_var
 
+
     candidate_indices = (explained >= rho).nonzero(as_tuple=True)[0]
     if len(candidate_indices) == 0:
         raise ValueError(f"rho = {rho} is not attained by any number of singular values")
 
     h = candidate_indices[0].item() + 1
-    
-
+    return h
     
     
 
@@ -59,14 +59,61 @@ def STE_optimize(B: Float[Tensor, "m h"], A: Float[Tensor, "h n"], n_bits: int, 
 
     return B_opt, A_opt
 
-def quantize():
-    pass
+def quantize(A: Float [Tensor, "m n"], n_bits: int, group_size: int, method: str):
+
+    if method == "rtn":
+        return rtn_quant(A, n_bits, group_size)
+    elif method == "binary":
+        return binary_quant(A, group_size)
+    else:
+        raise ValueError(f"Unknown quantization method: {method}")
+    
 
 
-def binary_quant():
-    pass
+def binary_quant(A: Float [Tensor, "m n"], group_size: int):
+    m, n = A.shape
+
+    assert n % group_size == 0, f"n = {n} must be divisible by group_size = {group_size}"
+
+    # SPLIT INTO GROUPS
+    # A: (m, n/g, g)
+    A_grouped = A.reshape(m, n // group_size, group_size)
+
+    Q = torch.sign(A_grouped)
+    scale = A_grouped.abs().mean(dim=-1, keepdim=True)
+
+    return Q, scale
+
+def binary_dequant(Q, scale):
+    return (scale * Q).reshape(Q.shape[0], -1)
+
+# asymmetric by default
+def rtn_quant(A: Float [Tensor, "m n"], n_bits: int, group_size: int):
+    q_min, q_max = -(2 ** (n_bits - 1)), 2 ** (n_bits - 1) - 1
+
+    m, n = A.shape
+
+    assert n % group_size == 0, f"n = {n} must be divisible by group_size = {group_size}"
+
+    # SPLIT INTO GROUPS
+    # A: (m, n/g, g)
+    A_grouped = A.reshape(m, n // group_size, group_size)
+
+    A_max = A_grouped.amax(dim=-1, keepdim=True)
+    A_min = A_grouped.amin(dim=-1, keepdim=True)
+    
+    matrix_range = A_max - A_min
+
+    quantized_range = q_max - q_min
+
+    scale = (matrix_range / quantized_range).clamp(min=1e-8)
+
+    zero_point_offset = torch.round(q_min - A_min / scale)
+
+    Q = torch.clamp(torch.round(A_grouped / scale) + zero_point_offset, q_min, q_max)
+
+    return Q, scale, zero_point_offset
 
 
-def RTN_quant():
-    pass
-
+def rtn_dequant(Q, scale, zero_point):
+    return (scale * (Q - zero_point)).reshape(Q.shape[0], -1)
