@@ -4,6 +4,8 @@ import torch
 import argparse
 from typing import Any
 import os
+import logging
+import sys
 import json
 from pathlib import Path
 from lm_eval import evaluator
@@ -75,18 +77,30 @@ def format_results_path(args: argparse.Namespace) -> Path:
     return Path(args.res_path) / model_name / args.dataset / args.method / filename
 
 
-def main():
-    # set device for torch
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {device.upper()}")
+logger = logging.getLogger(__name__)
 
+
+def main():
     # grab CLAs and output path
     args = get_args()
+
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info(
+        "Starting: method=%s model=%s dataset=%s device=%s",
+        args.method, args.model, args.dataset, device.upper(),
+    )
 
     # STE optimization only runs with --opt (off = paper's "No Opt" ablation, Fig. 3)
     opt_steps = args.opt_steps if args.opt else 0
 
     out_path = format_results_path(args)
+    logger.info("Writing results to %s", out_path)
 
     hf_access_token = os.environ.get("HF_TOKEN", default=None)
 
@@ -107,9 +121,7 @@ def main():
         token=hf_access_token,
         device_map="auto",
     )
-    print(
-        f"Successfully loaded {model.name_or_path} onto device: {device.upper()}"
-    )
+    logger.info("Loaded base model %s", model.name_or_path)
 
     tokenizer = AutoTokenizer.from_pretrained(
         pretrained_model_name_or_path=args.model, token=hf_access_token
@@ -119,10 +131,14 @@ def main():
     model = PeftModel.from_pretrained(
         model=model, model_id=args.adapter_path, local_files_only=True
     )
+    logger.info("Loaded LoRA adapter from %s", args.adapter_path)
 
     # EVAL SECTION
     model.eval()
 
+    if args.limit:
+        logger.info("Starting eval (limit=%s)", args.limit)
+    logger.info("Starting evaluation.")
     hf_lm = HFLM(pretrained=model, tokenizer=tokenizer, device=device, batch_size="auto")
 
     # run evals
@@ -134,6 +150,7 @@ def main():
         batch_size="auto",
         device=device,
     )
+    logger.info("Evaluation complete: %s", eval_results["results"])
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
@@ -148,6 +165,7 @@ def main():
             f,
             indent=2,
         )
+    logger.info("Results written to %s", out_path)
 
 
 if __name__ == "__main__":
