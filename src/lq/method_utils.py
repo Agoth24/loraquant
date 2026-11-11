@@ -55,8 +55,10 @@ def ste_round(x: Float[Tensor, "m n"]):
     # pytorch backward pass only sees x
     return x + (torch.round(x) - x).detach()
 
+
 def ste_sign(x: Float[Tensor, "m n"]):
     return x + (torch.where(x >= 0, 1, -1) - x).detach()
+
 
 def ste_optimize(
     B: Float[Tensor, "m h"],
@@ -113,8 +115,9 @@ def quantize(
     elif method == "binary":
         return binary_quant(A, group_size, columnwise)
     else:
-        raise ValueError(f"Unknown quantization method: {method}") 
-    
+        raise ValueError(f"Unknown quantization method: {method}")
+
+
 def dequantize(Q, scale, zero_point, method: str, columnwise: bool = False):
     if method == "rtn":
         return rtn_dequant(Q, scale, zero_point, columnwise)
@@ -145,12 +148,14 @@ def binary_quant(A: Float[Tensor, "m n"], group_size: int, columnwise: bool = Fa
 
 
 def binary_dequant(Q, scale, columnwise: bool = False):
-    dQ = (scale * Q).reshape(Q.shape[0], -1)
+    dQ = (scale * Q).reshape(Q.shape[0], Q.shape[1] * Q.shape[2] )
     return dQ.T if columnwise else dQ
 
 
 # asymmetric by default
-def rtn_quant(A: Float[Tensor, "m n"], n_bits, group_size: int = 128, columnwise: bool = False):
+def rtn_quant(
+    A: Float[Tensor, "m n"], n_bits: int, group_size: int = 128, columnwise: bool = False
+):
 
     if columnwise:
         A = A.T
@@ -182,5 +187,5 @@ def rtn_quant(A: Float[Tensor, "m n"], n_bits, group_size: int = 128, columnwise
 
 
 def rtn_dequant(Q, scale, zero_point, columnwise: bool = False):
-    dQ = (scale * (Q - zero_point)).reshape(Q.shape[0], -1)
+    dQ = (scale * (Q - zero_point)).reshape(Q.shape[0], Q.shape[1] * Q.shape[2])
     return dQ.T if columnwise else dQ

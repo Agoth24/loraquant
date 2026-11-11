@@ -32,6 +32,8 @@ CLI_ARGS: dict[str, Any] = {
     "--low_bits": dict(type=int),
     "--ratio": dict(type=float, default=0.7),
     "--opt": dict(action="store_true"),
+    "--opt_steps": dict(type=int, default=100),
+    "--lr": dict(type=float, default=1e-3),
     "--limit": dict(type=int),
     "--res_path": dict(type=str, default="outputs"),
 }
@@ -49,7 +51,7 @@ def get_args():
 
 
 # CONVERT ARGUMENTS INTO PATH FOR RESULTS
-def format_results_path(args: dict[str, Any]) -> Path:
+def format_results_path(args: argparse.Namespace) -> Path:
     # shorten the model name
     model_name = args.model.split("/")[-1].lower()
 
@@ -81,7 +83,10 @@ def main():
     # grab CLAs and output path
     args = get_args()
 
-    out_path = format_results_path(vars(args))
+    # STE optimization only runs with --opt (off = paper's "No Opt" ablation, Fig. 3)
+    opt_steps = args.opt_steps if args.opt else 0
+
+    out_path = format_results_path(args)
 
     hf_access_token = os.environ.get("HF_TOKEN", default=None)
 
