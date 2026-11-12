@@ -228,6 +228,7 @@ CLAUDE.md
 *.pdf
 
 notebooks/
+*.ipynb
 .vscode
 
 *.sh

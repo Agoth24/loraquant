@@ -81,23 +81,24 @@ def ste_optimize(
     # init optimizer for B_opt, A_opt
     optimizer = torch.optim.Adam([B_opt, A_opt], lr=lr)
 
-    # run STE
-    for _ in range(n_steps):
-        # quantize
-        qB = quantize(B_opt, n_bits, group_size, method, columnwise=True)
-        qA = quantize(A_opt, n_bits, group_size, method, columnwise=False)
+    # run STE; enable_grad b/c called inside torch.no_grad() block
+    with torch.enable_grad():
+        for _ in range(n_steps):
+            # quantize
+            qB = quantize(B_opt, n_bits, group_size, method, columnwise=True)
+            qA = quantize(A_opt, n_bits, group_size, method, columnwise=False)
 
-        # dequantize (recover the matrices)
-        B_rec = dequantize(*qB, method=method, columnwise=True)
-        A_rec = dequantize(*qA, method=method, columnwise=False)
+            # dequantize (recover the matrices)
+            B_rec = dequantize(*qB, method=method, columnwise=True)
+            A_rec = dequantize(*qA, method=method, columnwise=False)
 
-        # compute the frobenius norm between recovered & original adapter
-        loss = torch.norm(B_rec @ A_rec - training_target, p="fro")
+            # compute the frobenius norm between recovered & original adapter
+            loss = torch.norm(B_rec @ A_rec - training_target, p="fro")
 
-        # BACKPROPAGATE
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            # BACKPROPAGATE
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
     # detach from the computation graph
     return B_opt.detach(), A_opt.detach()
