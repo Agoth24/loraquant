@@ -220,6 +220,7 @@ __marimo__/
 # custom gitignores
 /outputs/*
 *notes.md
+*main.md
 
 /weights
 /models
