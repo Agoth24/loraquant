@@ -228,3 +228,5 @@ CLAUDE.md
 
 notebooks/
 .vscode
+
+*.sh

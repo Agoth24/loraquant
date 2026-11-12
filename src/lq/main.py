@@ -1,5 +1,5 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
-from peft import PeftModel
+from peft import PeftModel, get_peft_model_state_dict
 import torch
 import argparse
 from typing import Any
@@ -137,8 +137,15 @@ def main():
     model.eval()
 
     if args.limit:
-        logger.info("Starting eval (limit=%s)", args.limit)
+        logger.info("Starting evalution (limit=%s).", args.limit)
     logger.info("Starting evaluation.")
+
+    adapter_state_dict = get_peft_model_state_dict
+
+    if args.method in ["rtn", "binary"]:
+
+
+
     hf_lm = HFLM(pretrained=model, tokenizer=tokenizer, device=device, batch_size="auto")
 
     # run evals

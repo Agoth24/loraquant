@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -616,12 +616,12 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "accelerate", specifier = ">=1.15.0" },
-    { name = "bitsandbytes", specifier = ">=0.50.2" },
+    { name = "accelerate", specifier = ">=1.14.0" },
+    { name = "bitsandbytes", specifier = ">=0.50.1" },
     { name = "jaxtyping", specifier = ">=0.3.11" },
-    { name = "lm-eval", extras = ["hf"], specifier = ">=0.4.13" },
+    { name = "lm-eval", extras = ["hf"], specifier = ">=0.4.11" },
     { name = "numpy", specifier = ">=2.5.3" },
-    { name = "peft", specifier = ">=0.21.2" },
+    { name = "peft", specifier = ">=0.19.1" },
     { name = "torch", specifier = ">=2.14.1" },
     { name = "transformers", specifier = ">=5.20.1" },
 ]
