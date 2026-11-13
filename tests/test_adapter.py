@@ -35,7 +35,7 @@ def model():
 
 def make_args(**overrides) -> argparse.Namespace:
     base = dict(method="rtn", group_size=G, high_bits=2, low_bits=None,
-                ratio=0.7, opt=False, opt_steps=10, lr=1e-3)
+                ratio=0.7, opt=False, opt_steps=10, lr=1e-3, svd="full")
     return argparse.Namespace(**(base | overrides))
 
 
@@ -164,3 +164,17 @@ def test_lq_ignores_opt_steps_without_opt(model):
 
     for (B1, A1), (B2, A2) in zip(lora_weights(model).values(), lora_weights(m2).values()):
         assert torch.equal(B1, B2) and torch.equal(A1, A2)
+
+
+@pytest.mark.parametrize("rho", [0.3, 0.7, 0.95])
+def test_lq_qr_svd_same_avg_bits_as_full(model, rho):
+    """--svd qr gives the same singular values, so the same h and bit budget as full."""
+    expected = expected_lq_bits(model, rho, high_bits=3)
+    avg = quantize_adapter(model, make_args(method="lq", high_bits=3, ratio=rho, svd="qr"))
+    assert avg == pytest.approx(expected)
+
+
+def test_lq_qr_svd_model_still_runs(model):
+    quantize_adapter(model, make_args(method="lq", high_bits=2, svd="qr"))
+    out = model(torch.randn(4, D_IN))
+    assert out.shape == (4, D_OUT) and torch.isfinite(out).all()

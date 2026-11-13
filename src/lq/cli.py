@@ -28,6 +28,7 @@ CLI_ARGS: dict[str, Any] = {
     "--opt": dict(action="store_true"),
     "--opt_steps": dict(type=int, default=100),
     "--lr": dict(type=float, default=1e-3),
+    "--svd": dict(choices=["full", "qr"], default="full"),
     "--limit": dict(type=int),
     "--res_path": dict(type=str, default="outputs"),
 }
@@ -74,6 +75,9 @@ def validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> 
     if args.limit is not None and args.limit <= 0:
         parser.error(f"--limit must be > 0, got {args.limit}")
 
+    if args.svd != "full" and args.method != "lq":
+        parser.error(f"--svd {args.svd} only applies to --method lq")
+
 
 # construct the results path
 def format_results_path(args: argparse.Namespace) -> Path:
@@ -96,6 +100,7 @@ def format_results_path(args: argparse.Namespace) -> Path:
         "rho": args.ratio if args.method == "lq" else None,  # ratio is only used by lq
         "opt": args.opt_steps if opt else None,
         "lr": args.lr if opt else None,
+        "svd": args.svd if args.method == "lq" and args.svd != "full" else None,
         "lim": args.limit,
     }
 

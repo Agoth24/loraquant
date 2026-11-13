@@ -46,7 +46,7 @@ def quantize_adapter(adapted_model, args: argparse.Namespace) -> float:
                 A = dequantize(*qA, method=q_method, columnwise=False)
 
             elif args.method == "lq":
-                (Bh_q, Ah_q), (Bl_q, Al_q) = loraquant(B=lora_B, A=lora_A, rho=args.ratio, h_bits=args.high_bits, l_bits=args.low_bits, opt_steps=opt_steps, lr=args.lr, group_size=args.group_size)
+                (Bh_q, Ah_q), (Bl_q, Al_q) = loraquant(B=lora_B, A=lora_A, rho=args.ratio, h_bits=args.high_bits, l_bits=args.low_bits, opt_steps=opt_steps, lr=args.lr, group_size=args.group_size, svd=args.svd)
 
                 B = torch.cat([dequantize(*Bh_q, method="rtn", columnwise=True), dequantize(*Bl_q, method="binary", columnwise=True)], dim=1)
                 A = torch.cat([dequantize(*Ah_q, method="rtn", columnwise=False), dequantize(*Al_q, method="binary", columnwise=False)], dim=0)

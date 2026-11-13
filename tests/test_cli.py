@@ -14,7 +14,7 @@ def make_args(**overrides) -> argparse.Namespace:
     base = dict(
         model=MODEL, method="fp", dataset="gsm8k", adapter_path=".",
         group_size=128, high_bits=None, low_bits=None, ratio=0.7,
-        opt=False, opt_steps=100, lr=1e-3, limit=None, res_path="outputs",
+        opt=False, opt_steps=100, lr=1e-3, svd="full", limit=None, res_path="outputs",
     )
     return argparse.Namespace(**(base | overrides))
 
@@ -31,6 +31,8 @@ def validate(args):
     dict(method="bin"),
     dict(method="lq", high_bits=2),
     dict(method="lq", high_bits=3, ratio=1.0, opt=True, limit=10),
+    dict(method="lq", high_bits=2, svd="qr"),
+    dict(method="rtn", high_bits=2, svd="full"),
 ])
 def test_valid_args_pass(overrides, tmp_path):
     validate(make_args(adapter_path=str(tmp_path), **overrides))
@@ -49,6 +51,8 @@ def test_valid_args_pass(overrides, tmp_path):
     (dict(method="lq", high_bits=2, opt=True, opt_steps=0), "--opt_steps must be > 0"),
     (dict(method="lq", high_bits=2, opt=True, lr=0.0), "--lr must be > 0"),
     (dict(limit=0), "--limit must be > 0"),
+    (dict(method="rtn", high_bits=2, svd="qr"), "--svd qr only applies to --method lq"),
+    (dict(method="bin", svd="qr"), "--svd qr only applies to --method lq"),
 ], ids=lambda x: x if isinstance(x, str) else None)
 def test_invalid_args_exit_with_message(overrides, msg, tmp_path, capsys):
     args = make_args(**({"adapter_path": str(tmp_path)} | overrides))
@@ -75,6 +79,23 @@ def test_get_args_parses_and_validates(monkeypatch, tmp_path):
     assert args.group_size == 128 and args.ratio == 0.7  # defaults
 
 
+def test_get_args_svd_default_and_qr(monkeypatch, tmp_path):
+    base = ["lq", "--model", MODEL, "--adapter_path", str(tmp_path), "--method", "lq", "--high_bits", "2"]
+    monkeypatch.setattr(sys, "argv", base)
+    assert get_args().svd == "full"
+    monkeypatch.setattr(sys, "argv", base + ["--svd", "qr"])
+    assert get_args().svd == "qr"
+
+
+def test_get_args_rejects_unknown_svd(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "argv", [
+        "lq", "--model", MODEL, "--adapter_path", str(tmp_path),
+        "--method", "lq", "--high_bits", "2", "--svd", "gesvd",
+    ])
+    with pytest.raises(SystemExit):
+        get_args()
+
+
 def test_get_args_rejects_invalid(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "argv", [
         "lq", "--model", MODEL, "--adapter_path", str(tmp_path), "--method", "rtn",
@@ -96,6 +117,8 @@ ROOT = "outputs/llama-2-7b-hf/gsm8k"
     (dict(method="lq", high_bits=2, low_bits=1, ratio=0.8), "lq/lq_hi2_grp128_rho0.8.json"),
     (dict(method="lq", high_bits=2, ratio=0.8, opt=True), "lq/lq_hi2_grp128_rho0.8_opt100_lr0.001.json"),
     (dict(method="lq", high_bits=2, ratio=0.8, limit=50), "lq/lq_hi2_grp128_rho0.8_lim50.json"),
+    (dict(method="lq", high_bits=2, ratio=0.8, svd="qr"), "lq/lq_hi2_grp128_rho0.8_svdqr.json"),
+    (dict(method="lq", high_bits=2, ratio=0.8, svd="full"), "lq/lq_hi2_grp128_rho0.8.json"),
 ])
 def test_results_path(overrides, expected):
     assert str(format_results_path(make_args(**overrides))) == f"{ROOT}/{expected}"
@@ -105,6 +128,12 @@ def test_opt_and_no_opt_runs_do_not_collide():
     no_opt = format_results_path(make_args(method="lq", high_bits=2))
     opt = format_results_path(make_args(method="lq", high_bits=2, opt=True))
     assert no_opt != opt
+
+
+def test_full_and_qr_svd_runs_do_not_collide():
+    full = format_results_path(make_args(method="lq", high_bits=2, svd="full"))
+    qr = format_results_path(make_args(method="lq", high_bits=2, svd="qr"))
+    assert full != qr
 
 
 def test_opt_settings_change_path():

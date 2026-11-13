@@ -187,6 +187,29 @@ def test_inputs_not_mutated(lora):
     torch.testing.assert_close(A, A0)
 
 
+def test_svd_method_passed_to_svd_split(lora, monkeypatch):
+    import lq.loraquant as lq_mod
+    seen = []
+
+    def spy(B, A, method="full"):
+        seen.append(method)
+        return svd_split(B, A, method="full")
+
+    monkeypatch.setattr(lq_mod, "svd_split", spy)
+    B, A = lora
+    loraquant(B, A, rho=RHO, h_bits=3, l_bits=1, opt_steps=0, lr=1e-3, group_size=G, svd="qr")
+    loraquant(B, A, rho=RHO, h_bits=3, l_bits=1, opt_steps=0, lr=1e-3, group_size=G)
+    assert seen == ["qr", "full"]
+
+
+def test_qr_svd_same_split_sizes(lora):
+    B, A = lora
+    h = reference_split(B, A)[0]
+    out = loraquant(B, A, rho=RHO, h_bits=3, l_bits=1, opt_steps=0, lr=1e-3, group_size=G, svd="qr")
+    Bh, Ah, Bl, Al = dequant_all(out)
+    assert Bh.shape == (M, h) and Bl.shape == (M, R - h)
+
+
 def test_deterministic(lora):
     B, A = lora
     for x, y in zip(dequant_all(run(B, A, opt_steps=5)), dequant_all(run(B, A, opt_steps=5))):

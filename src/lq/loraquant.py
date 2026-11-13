@@ -12,10 +12,11 @@ def loraquant(
     opt_steps: int,
     lr: float,
     group_size: int = 128,
+    svd: str = "full",
 ):
     m, n, r = B.shape[0], A.shape[1], B.shape[1]
     # compute B' and A'
-    B_p, A_p, S = svd_split(B, A)
+    B_p, A_p, S = svd_split(B, A, method=svd)
 
 
     h = compute_h(rho, S)

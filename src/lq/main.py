@@ -70,14 +70,14 @@ def main():
     logger.info("eval %s%s", args.dataset, f" (limit {args.limit})" if args.limit else "")
     t_eval = time.perf_counter()
 
-    hf_lm = HFLM(pretrained=adapted_model, tokenizer=tokenizer, device=device, batch_size="auto")
+    hf_lm = HFLM(pretrained=adapted_model, tokenizer=tokenizer, device=device, batch_size=8)
 
     eval_results = evaluator.simple_evaluate(
         model=hf_lm,
         tasks=[args.dataset],
         num_fewshot=0,  # no fewshots given
         limit=args.limit,
-        batch_size="auto",
+        batch_size=8,
         device=device,
     )
     # only log numeric metrics

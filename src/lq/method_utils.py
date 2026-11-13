@@ -4,7 +4,10 @@ from torch import Tensor
 from jaxtyping import Float
 
 
-def svd_split(B: Float[Tensor, "m r"], A: Float[Tensor, "r n"]):
+SVD_TOL = {"full": 1e-2, "qr": 1e-4}
+
+
+def _svd_full(B: Float[Tensor, "m r"], A: Float[Tensor, "r n"]):
     # get rank
     rank = B.shape[1]
 
@@ -13,14 +16,39 @@ def svd_split(B: Float[Tensor, "m r"], A: Float[Tensor, "r n"]):
     U, S, V_t = torch.linalg.svd(delta_W, full_matrices=False)
 
     # truncate the matrices
-    U, S, V_t = U[:, :rank], S[:rank], V_t[:rank, :]
+    return U[:, :rank], S[:rank], V_t[:rank, :]
+
+
+def _svd_qr(B: Float[Tensor, "m r"], A: Float[Tensor, "r n"]):
+    rank = B.shape[1]
+
+    Q_b, R_b = torch.linalg.qr(A=B.float(), mode="reduced")
+    Q_a, R_a = torch.linalg.qr(A=A.T.float(), mode="reduced")
+
+    C = R_b @ R_a.T
+
+    U_c, S, V_t_c = torch.linalg.svd(C)
+
+    U, V_t = Q_b @ U_c, V_t_c @ Q_a.T
+
+    return U[:, :rank], S[:rank], V_t[:rank, :]
+
+
+def svd_split(B: Float[Tensor, "m r"], A: Float[Tensor, "r n"], method: str = "full"):
+    if method == "full":
+        U, S, V_t = _svd_full(B, A)
+    elif method == "qr":
+        U, S, V_t = _svd_qr(B, A)
+    else:
+        raise ValueError(f"unknown svd method {method}")
 
     B_prime, A_prime = U * S.sqrt(), S.sqrt()[:, None] * V_t
 
+    delta_W = B.float() @ A.float()
     rel_err = (B_prime @ A_prime - delta_W).norm() / delta_W.norm()
 
-    # assert the matrices are close in working precision
-    assert rel_err < 1e-4, rel_err
+    # assert the matrices are close for the chosen method
+    assert rel_err < SVD_TOL[method], rel_err
 
     return B_prime, A_prime, S
 
